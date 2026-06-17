@@ -1,0 +1,16 @@
+{
+  "name": "勤怠管理",
+  "short_name": "勤怠管理",
+  "description": "業務月報（事務版）の勤怠入力と報告書出力",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#EEF0F4",
+  "theme_color": "#26346B",
+  "lang": "ja",
+  "icons": [
+    { "src": "icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
