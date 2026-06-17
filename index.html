@@ -9,6 +9,7 @@
 <meta name="theme-color" content="#26346B">
 <link rel="apple-touch-icon" href="icon.png">
 <link rel="icon" type="image/png" href="icon.png">
+<link rel="manifest" href="manifest.json">
 <title>勤怠管理</title>
 <style>
   :root{
@@ -94,6 +95,7 @@
   }
   .cell.has{background:var(--accent-soft); border-color:#D6DCF2;}
   .cell .mini{margin-top:2px; font-size:9.5px; line-height:1.25; color:var(--accent); font-weight:600; text-align:center; letter-spacing:-.02em;}
+  .cell .mini.hol{color:var(--sun); font-size:8.5px; line-height:1.12; word-break:break-all; max-height:21px; overflow:hidden;}
   .cell .more{font-size:8.5px; color:var(--accent-2); opacity:.8;}
 
   /* ---------- Records ---------- */
@@ -204,6 +206,14 @@
 
   .rep-bar2{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 16px; background:rgba(255,255,255,.92); border-bottom:1px solid var(--line);}
   .rep-bar2 .lab{font-size:13px; color:#3A4150;}
+  .rep-bar3{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 16px; background:rgba(255,255,255,.92); border-bottom:1px solid var(--line);}
+  .rep-bar3 .lab{font-size:13px; color:#3A4150; flex:1;}
+  .rd-acts{display:flex; gap:8px; flex:0 0 auto;}
+  .rd-btn{font-size:13px; font-weight:700; border-radius:10px; padding:9px 12px; background:var(--accent-soft); color:var(--accent); transition:transform .08s;}
+  .rd-btn:active{transform:scale(.97);}
+  .rep-mail{padding:12px 16px; background:rgba(255,255,255,.92); border-bottom:1px solid var(--line);}
+  .mail-btn{width:100%; background:var(--accent); color:#fff; font-size:15px; font-weight:700; border-radius:12px; padding:14px; box-shadow:0 3px 10px rgba(38,52,107,.25); transition:transform .08s;}
+  .mail-btn:active{transform:scale(.99);}
   .switch{position:relative; width:50px; height:30px; flex:0 0 auto;}
   .switch input{opacity:0; width:0; height:0;}
   .switch .sl{position:absolute; inset:0; background:#CFD4DF; border-radius:30px; transition:.2s;}
@@ -341,17 +351,27 @@
       <button class="x" id="repClose">閉じる</button>
       <div class="ttl">勤怠報告書</div>
       <div class="rep-actions">
-        <button class="png" id="repPng">画像保存</button>
-        <button class="print" id="repPrint">印刷 / PDF</button>
+        <button class="png" id="repPng">画像</button>
+        <button class="print" id="savePdf">PDF保存</button>
       </div>
     </div>
     <div class="rep-bar2">
       <span class="lab">「以上・以下は空白」と空欄の斜線を付ける</span>
       <label class="switch"><input type="checkbox" id="endMarkSw"><span class="sl"></span></label>
     </div>
+    <div class="rep-mail">
+      <button class="mail-btn" id="emailReport">メールで送信（PDF・CSVを添付）</button>
+    </div>
+    <div class="rep-bar3">
+      <span class="lab">事務の方がコピペで使えるデータ</span>
+      <div class="rd-acts">
+        <button class="rd-btn" id="copyTable">表をコピー</button>
+        <button class="rd-btn" id="saveCsv">CSV保存</button>
+      </div>
+    </div>
     <div class="warn" id="repWarn" style="display:none;"></div>
     <div class="rep-scroll"><div class="paper" id="repPaper"></div></div>
-    <div class="rep-hint">iPhoneでPDFにするには「印刷 / PDF」→ 共有 →「ファイルに保存」。<br>うまくいかない時は「画像保存」でPNGとして残せます。</div>
+    <div class="rep-hint">「PDF保存」はヘッダーや日付の付かないPDFを作ります。<br>「メールで送信」はPDFとCSVを添付してメールアプリを開きます（スマホ）。パソコンではファイルを保存後にメール作成画面が開くので、保存したファイルを添付してください。宛先は空欄です。</div>
   </div>
 
   <!-- 印刷専用（画面外） -->
@@ -381,7 +401,7 @@ const Store={
 /* ================= State ================= */
 const now=new Date();
 let state={
-  name:'佐伯挙亜',
+  name:'',
   year:now.getFullYear(),
   month:now.getMonth()+1,
   showEndMark:true,
@@ -400,6 +420,31 @@ const durMin=r=>{const d=toMin(r.end)-toMin(r.start);return d>0?d:0;};
 const dispT=t=>{const[h,m]=t.split(':');return `${+h}:${m}`;};
 function fmtHM(min){const h=Math.floor(min/60),m=min%60;return m?`${h}時間${m}分`:`${h}時間`;}
 function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('on');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('on'),1500);}
+
+/* ================= 日本の祝日（振替休日・国民の休日・春分秋分を含む） ================= */
+const _holCache={};
+function jpHolidays(year){
+  if(_holCache[year]) return _holCache[year];
+  const H={}; const set=(m,d,n)=>{H[keyOf(year,m,d)]=n;};
+  const nthMon=(m,n)=>{ const first=new Date(year,m-1,1).getDay(); return 1+((1-first+7)%7)+(n-1)*7; };
+  set(1,1,'元日'); set(2,11,'建国記念の日'); set(2,23,'天皇誕生日');
+  set(4,29,'昭和の日'); set(5,3,'憲法記念日'); set(5,4,'みどりの日'); set(5,5,'こどもの日');
+  set(8,11,'山の日'); set(11,3,'文化の日'); set(11,23,'勤労感謝の日');
+  set(1,nthMon(1,2),'成人の日'); set(7,nthMon(7,3),'海の日'); set(9,nthMon(9,3),'敬老の日'); set(10,nthMon(10,2),'スポーツの日');
+  set(3, Math.floor(20.8431+0.242194*(year-1980)-Math.floor((year-1980)/4)), '春分の日');
+  set(9, Math.floor(23.2488+0.242194*(year-1980)-Math.floor((year-1980)/4)), '秋分の日');
+  const base=Object.assign({},H);
+  for(let mm=1;mm<=12;mm++){ const dim=new Date(year,mm,0).getDate();
+    for(let dd=1;dd<=dim;dd++){ const dt=new Date(year,mm-1,dd); if(dt.getDay()===0) continue;
+      const k=keyOf(year,mm,dd); if(base[k]) continue;
+      const p=new Date(year,mm-1,dd-1), n=new Date(year,mm-1,dd+1);
+      const pk=keyOf(p.getFullYear(),p.getMonth()+1,p.getDate()), nk=keyOf(n.getFullYear(),n.getMonth()+1,n.getDate());
+      if(base[pk]&&base[nk]) H[k]='国民の休日'; } }
+  for(const k of Object.keys(base).sort()){ const [yy,mm,dd]=k.split('-').map(Number); const dt=new Date(yy,mm-1,dd);
+    if(dt.getDay()===0){ let off=1; while(off<10){ const nd=new Date(yy,mm-1,dd+off); const kk=keyOf(nd.getFullYear(),nd.getMonth()+1,nd.getDate()); if(!H[kk]&&!base[kk]){H[kk]='振替休日';break;} off++; } } }
+  _holCache[year]=H; return H;
+}
+function holidayName(y,m,d){ return jpHolidays(y)[keyOf(y,m,d)]||null; }
 
 /* ================= Report SVG (verified against the original form) ================= */
 const PAGE_W=595.28, PAGE_H=841.89;
@@ -475,6 +520,39 @@ function monthFlatRows(){
   return rows;
 }
 
+/* ================= 事務用データ出力（表コピー / CSV） ================= */
+function monthTable(){
+  const rows=monthFlatRows();
+  const out=[['日付','曜日','出勤','退勤','勤務時間(時間)']];
+  for(const r of rows){
+    out.push([`${state.year}/${state.month}/${r.day}`, WD[wdOf(state.year,state.month,r.day)], dispT(r.start), dispT(r.end), (durMin(r)/60).toFixed(2)]);
+  }
+  return out;
+}
+function toTSV(t){ return t.map(r=>r.join('\t')).join('\n'); }
+function toCSV(t){ return '\uFEFF'+t.map(r=>r.map(c=>{c=String(c); return /[",\n\r]/.test(c)?'"'+c.replace(/"/g,'""')+'"':c;}).join(',')).join('\r\n'); }
+async function shareOrDownload(text, fn, mime){
+  try{ const file=new File([text], fn, {type:mime}); if(navigator.canShare && navigator.canShare({files:[file]})){ await navigator.share({files:[file], title:fn}); return; } }catch(e){ if(e && e.name==='AbortError') return; }
+  try{ const blob=new Blob([text],{type:mime+';charset=utf-8'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=fn; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1500); toast('保存しました（見つからなければ共有先をご確認ください）'); }catch(e){ toast('この環境では保存できません'); }
+}
+function copyToClipboard(text, okMsg){
+  const ta=document.createElement('textarea'); ta.value=text; ta.setAttribute('readonly',''); ta.style.position='fixed'; ta.style.left='-9999px';
+  document.body.appendChild(ta); ta.select(); try{ta.setSelectionRange(0,text.length);}catch(e){}
+  let ok=false; try{ ok=document.execCommand('copy'); }catch(e){}
+  document.body.removeChild(ta);
+  if(ok){ toast(okMsg); return; }
+  if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(text).then(()=>toast(okMsg)).catch(()=>toast('コピーできませんでした')); }
+  else toast('コピーできませんでした');
+}
+function copyTable(){
+  const t=monthTable(); if(t.length<=1){ toast('この月のデータがありません'); return; }
+  copyToClipboard(toTSV(t), '表をコピーしました（Excel等に貼り付け可）');
+}
+function saveCsv(){
+  const t=monthTable(); if(t.length<=1){ toast('この月のデータがありません'); return; }
+  shareOrDownload(toCSV(t), `業務月報_${state.year}年${state.month}月.csv`, 'text/csv');
+}
+
 /* ================= Render ================= */
 function render(){
   document.getElementById('f-name').value=state.name||'';
@@ -495,13 +573,16 @@ function renderCalendar(){
     if(dnum<1||dnum>dim){ h+=`<div class="cell empty"></div>`; continue; }
     const k=keyOf(y,m,dnum); const wd=wdOf(y,m,dnum);
     const ranges=state.entries[k]||[];
-    let cls='cell cur'+(wd===0?' s0':wd===6?' s6':'');
+    const hol=holidayName(y,m,dnum);
+    let cls='cell cur'+((wd===0||hol)?' s0':wd===6?' s6':'');
     if(ranges.length) cls+=' has';
     if(k===tk) cls+=' today';
     let mini='';
     if(ranges.length){
       mini=`<div class="mini">${dispT(ranges[0].start)}〜${dispT(ranges[0].end)}`+
            (ranges.length>1?`<span class="more"> +${ranges.length-1}</span>`:'')+`</div>`;
+    } else if(hol){
+      mini=`<div class="mini hol">${hol}</div>`;
     }
     h+=`<div class="${cls}" data-k="${k}"><span class="dn">${dnum}</span>${mini}</div>`;
   }
@@ -519,7 +600,7 @@ function renderRecords(){
   for(const k of rows){
     const d=+k.slice(8), wd=wdOf(state.year,state.month,d);
     const times=(state.entries[k]||[]).map(r=>`${dispT(r.start)}〜${dispT(r.end)}`).join('　/　');
-    const wc=wd===0?' s0':wd===6?' s6':'';
+    const wc=(wd===0||holidayName(state.year,state.month,d))?' s0':wd===6?' s6':'';
     h+=`<div class="rec" data-k="${k}"><div class="date${wc}">${d}日<span class="wd">(${WD[wd]})</span></div><div class="times">${times}</div><span class="chev">›</span></div>`;
   }
   list.innerHTML=h;
@@ -533,10 +614,11 @@ let editKey=null, editRanges=[];
 function openEditor(k){
   editKey=k;
   const d=+k.slice(8), wd=wdOf(state.year,state.month,d);
+  const hol=holidayName(state.year,state.month,d);
   editRanges=(state.entries[k]&&state.entries[k].length)
     ? state.entries[k].map(r=>({start:r.start,end:r.end}))
     : [{start:state.lastStart,end:state.lastEnd}];
-  document.getElementById('sheetTitle').innerHTML=`${state.month}月${d}日<span class="wd">(${WD[wd]})</span>`;
+  document.getElementById('sheetTitle').innerHTML=`${state.month}月${d}日<span class="wd">(${WD[wd]}${hol?'・'+hol:''})</span>`;
   document.getElementById('editMsg').textContent='';
   document.getElementById('delDay').style.display=(state.entries[k]&&state.entries[k].length)?'block':'none';
   renderRanges();
@@ -599,32 +681,109 @@ function openReport(){
   if(over){ warn.style.display='block'; warn.textContent=`この用紙は22行までです。${all.length}件中、先頭22件のみ表示しています。`; }
   else warn.style.display='none';
   document.getElementById('reportOv').classList.add('on');
+  warmPDF();
 }
 function refreshReport(){
   const all=monthFlatRows(); const rows=all.slice(0,22);
   const svg=buildReportSVG({name:state.name,year:state.year,month:state.month,showEndMark:state.showEndMark,rows});
   document.getElementById('repPaper').innerHTML=svg;
   document.getElementById('printArea').innerHTML=svg;
+  warmPDF();
+}
+/* ===== 画像 / PDF 生成（ブラウザ印刷を使わず、ヘッダー/フッター無しのPDFを生成） ===== */
+function reportCanvasAsync(scale){
+  return new Promise(resolve=>{
+    const NS=['http:','','www.w3.org','2000','svg'].join('/');
+    let svg=document.getElementById('printArea').querySelector('svg').outerHTML;
+    if(svg.indexOf('xmlns')===-1) svg=svg.replace('<svg ','<svg xmlns="'+NS+'" ');
+    const w=Math.round(PAGE_W*scale), h=Math.round(PAGE_H*scale);
+    const c=document.createElement('canvas'); c.width=w; c.height=h;
+    const ctx=c.getContext('2d'); ctx.fillStyle='#fff'; ctx.fillRect(0,0,w,h);
+    const img=new Image();
+    img.onload=()=>{ ctx.drawImage(img,0,0,w,h); resolve(c); };
+    img.onerror=()=>resolve(null);
+    img.src='data:image/svg+xml;base64,'+btoa(unescape(encodeURIComponent(svg)));
+  });
 }
 function exportPNG(){
-  const NS=['http:','','www.w3.org','2000','svg'].join('/');
-  let svg=document.getElementById('printArea').querySelector('svg').outerHTML;
-  if(svg.indexOf('xmlns')===-1) svg=svg.replace('<svg ','<svg xmlns="'+NS+'" ');
-  const scale=2.4, w=PAGE_W*scale, h=PAGE_H*scale;
-  const c=document.createElement('canvas'); c.width=Math.round(w); c.height=Math.round(h);
-  const ctx=c.getContext('2d'); ctx.fillStyle='#fff'; ctx.fillRect(0,0,c.width,c.height);
-  const img=new Image();
-  img.onload=()=>{
-    ctx.drawImage(img,0,0,c.width,c.height);
-    c.toBlob(b=>{
-      const url=URL.createObjectURL(b); const a=document.createElement('a');
-      a.href=url; a.download=`業務月報_${state.year}年${state.month}月.png`;
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(()=>URL.revokeObjectURL(url),1500); toast('画像を保存しました');
-    },'image/png');
-  };
-  img.onerror=()=>toast('画像の生成に失敗しました');
-  img.src='data:image/svg+xml;base64,'+btoa(unescape(encodeURIComponent(svg)));
+  reportCanvasAsync(2.4).then(c=>{
+    if(!c){ toast('画像の生成に失敗しました'); return; }
+    c.toBlob(b=>{ shareOrDownloadBlob(b, `${fileBase()}.png`, 'image/png'); },'image/png');
+  });
+}
+function buildImagePDF(jpeg, w, h){
+  const parts=[]; let offset=0; const xref=[];
+  const enc=s=>{ const a=new Uint8Array(s.length); for(let i=0;i<s.length;i++)a[i]=s.charCodeAt(i)&0xff; return a; };
+  const push=u=>{ parts.push(u); offset+=u.length; };
+  const pushStr=s=>push(enc(s));
+  pushStr('%PDF-1.3\n%\xFF\xFF\xFF\xFF\n');
+  const obj=(n,body)=>{ xref[n]=offset; pushStr(n+' 0 obj\n'+body); };
+  obj(1,'<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
+  obj(2,'<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n');
+  const mb='[0 0 '+PAGE_W.toFixed(2)+' '+PAGE_H.toFixed(2)+']';
+  obj(3,'<< /Type /Page /Parent 2 0 R /MediaBox '+mb+' /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>\nendobj\n');
+  xref[4]=offset;
+  pushStr('4 0 obj\n<< /Type /XObject /Subtype /Image /Width '+w+' /Height '+h+' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length '+jpeg.length+' >>\nstream\n');
+  push(jpeg);
+  pushStr('\nendstream\nendobj\n');
+  const content='q\n'+PAGE_W.toFixed(2)+' 0 0 '+PAGE_H.toFixed(2)+' 0 0 cm\n/Im0 Do\nQ\n';
+  obj(5,'<< /Length '+content.length+' >>\nstream\n'+content+'endstream\nendobj\n');
+  const xrefStart=offset;
+  let xs='xref\n0 6\n0000000000 65535 f \n';
+  for(let i=1;i<=5;i++) xs+=String(xref[i]).padStart(10,'0')+' 00000 n \n';
+  pushStr(xs);
+  pushStr('trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n'+xrefStart+'\n%%EOF');
+  let total=0; parts.forEach(p=>total+=p.length);
+  const outp=new Uint8Array(total); let o=0; parts.forEach(p=>{ outp.set(p,o); o+=p.length; });
+  return new Blob([outp],{type:'application/pdf'});
+}
+async function makePDFBlob(){
+  const c=await reportCanvasAsync(2.5);
+  if(!c) return null;
+  const b64=c.toDataURL('image/jpeg',0.9).split(',')[1];
+  const bin=atob(b64); const bytes=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+  return buildImagePDF(bytes, c.width, c.height);
+}
+let _pdfBlob=null, _pdfKey='';
+function pdfKey(){ return state.year+'/'+state.month+'/'+state.showEndMark+'/'+monthFlatRows().map(r=>r.day+r.start+r.end).join(','); }
+async function ensurePDF(){ const k=pdfKey(); if(_pdfBlob && _pdfKey===k) return _pdfBlob; const b=await makePDFBlob(); if(b){ _pdfBlob=b; _pdfKey=k; } return b; }
+function warmPDF(){ setTimeout(()=>{ ensurePDF(); }, 350); }
+function fileBase(){ const ym=state.year+pad2(state.month); const nm=(state.name||'').replace(/[\s\u3000]/g,''); return nm ? `${ym}_業務月報_${nm}` : `${ym}_業務月報`; }
+function downloadBlob(blob, fn){ const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=fn; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1500); }
+async function shareOrDownloadBlob(blob, fn, mime){
+  try{ const file=new File([blob], fn, {type:mime}); if(navigator.canShare && navigator.canShare({files:[file]})){ await navigator.share({files:[file], title:fn}); return; } }catch(e){ if(e&&e.name==='AbortError') return; }
+  try{ downloadBlob(blob, fn); toast('保存しました（見つからなければ共有先をご確認ください）'); }catch(e){ toast('この環境では保存できません'); }
+}
+async function savePDF(){
+  const t=monthTable(); if(t.length<=1){ toast('この月のデータがありません'); return; }
+  let b=(_pdfBlob && _pdfKey===pdfKey())?_pdfBlob:null;
+  if(!b){ toast('PDFを準備中…'); b=await ensurePDF(); }
+  if(!b){ toast('PDFの生成に失敗しました'); return; }
+  shareOrDownloadBlob(b, `${fileBase()}.pdf`, 'application/pdf');
+}
+function mailText(){
+  const y=state.year, m=state.month, name=state.name||'';
+  const subject=`${y}年${m}月分の業務報告書　${name}`;
+  const body=`お世話になっております。\n\n${y}年${m}月分の業務報告を提出いたします。\n以下を添付いたします。\n\n・${y}年${m}月分の業務報告書pdfファイル\n・同報告書のcsvファイル（コピペ用にお使いください）\n\nどうぞよろしくお願いいたします。\n\n${name}`;
+  return {subject, body};
+}
+async function emailReport(){
+  const t=monthTable(); if(t.length<=1){ toast('この月のデータがありません'); return; }
+  const {subject, body}=mailText();
+  const csvFile=new File([toCSV(t)], fileBase()+'.csv', {type:'text/csv'});
+  let pdf=(_pdfBlob && _pdfKey===pdfKey())?_pdfBlob:null;
+  if(!pdf){ toast('PDFを準備中…'); pdf=await ensurePDF(); }
+  if(pdf){
+    const pdfFile=new File([pdf], fileBase()+'.pdf', {type:'application/pdf'});
+    if(navigator.canShare && navigator.canShare({files:[pdfFile, csvFile]})){
+      try{ await navigator.share({files:[pdfFile, csvFile], title:subject, text:body}); return; }
+      catch(e){ if(e&&e.name==='AbortError') return; }
+    }
+    downloadBlob(pdfFile, pdfFile.name);
+  }
+  downloadBlob(csvFile, csvFile.name);
+  setTimeout(()=>{ window.location.href='mailto:?subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(body); }, 500);
+  toast('PDF・CSVを保存しました。メール画面に添付してください');
 }
 
 /* ================= Backup / Restore (works inside in-app viewers too) ================= */
@@ -727,8 +886,11 @@ function bind(){
   document.getElementById('openReport').addEventListener('click',openReport);
   document.getElementById('repClose').addEventListener('click',()=>document.getElementById('reportOv').classList.remove('on'));
   document.getElementById('endMarkSw').addEventListener('change',e=>{state.showEndMark=e.target.checked;persist();refreshReport();});
-  document.getElementById('repPrint').addEventListener('click',()=>{ try{window.print();}catch(e){toast('印刷を開けませんでした。画像保存をお試しください');} });
+  document.getElementById('savePdf').addEventListener('click',savePDF);
+  document.getElementById('emailReport').addEventListener('click',emailReport);
   document.getElementById('repPng').addEventListener('click',exportPNG);
+  document.getElementById('copyTable').addEventListener('click',copyTable);
+  document.getElementById('saveCsv').addEventListener('click',saveCsv);
 
   document.getElementById('btnBackup').addEventListener('click',()=>openDataModal('backup'));
   document.getElementById('btnRestore').addEventListener('click',()=>openDataModal('restore'));
@@ -746,6 +908,8 @@ function buildMonthOptions(){
   buildMonthOptions();
   const saved=await Store.get();
   if(saved && typeof saved==='object'){ state=Object.assign(state,saved); if(!state.entries)state.entries={}; }
+  // 起動時は常に「今月」を表示（データは保持される）
+  const t=new Date(); state.year=t.getFullYear(); state.month=t.getMonth()+1;
   bind(); render();
 })();
 </script>
